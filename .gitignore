@@ -1,24 +1,12 @@
-# 1. API Keys and Secrets (CRITICAL!)
+# Environments
 .env
-
-# 2. SQLite Database (Your local chat history)
-chatbot.db
-*.db
-*.sqlite3
-
-# 3. Python Virtual Environments
 .venv/
 venv/
 env/
 
-# 4. Python Cache Files
+# Python cache
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
 
-# 5. Mac OS System Files
+# Mac system files (if applicable)
 .DS_Store
-
-# 6. Streamlit specific (if you add local configs later)
-.streamlit/secrets.toml

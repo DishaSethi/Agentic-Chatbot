@@ -1,8 +1,8 @@
 import streamlit as st
 import uuid
-from langgraph_backend import chatbot,retrieve_all_threads
-from langchain_core.messages import HumanMessage
-
+from chatbot_async import  build_graph,retrieve_all_threads
+from langchain_core.messages import HumanMessage,AIMessage,ToolMessage
+import asyncio
 
 
 def get_text(chunk):
@@ -29,13 +29,25 @@ def add_thread(thread_id):
 
 
 def load_conversation(thread_id):
-    state=chatbot.get_state(config={'configurable':{"thread_id":thread_id}})
-    if state.values:
+   async def fetch_state():
+      chatbot=await build_graph()
+      return await chatbot.aget_state(config={'configurable':{"thread_id":thread_id}})
+   state=asyncio.run(fetch_state())
+   if state.values:
          return state.values.get('messages',[])
 
-    return []
+   return []
 
-CONFIG={'configurable':{'thread_id':st.session_state['thread_id']}}
+# CONFIG={'configurable':{'thread_id':st.session_state['thread_id']}}
+
+CONFIG={
+     "configurable":{"thread_id":st.session_state["thread_id"],
+          "metadata":{
+               "thread_id":st.session_state["thread_id"]
+          },
+          "run_name":"chat_turn",
+          }
+}
 #
 
 
@@ -85,28 +97,59 @@ for message in st.session_state['message_history']:
      with st.chat_message(message['role']):
           st.text(message['content'])
 
-
 user_input=st.chat_input('Type here')
 
 if user_input:
+    # 1. Handle the user input
+    st.session_state['message_history'].append({'role':'user','content':user_input})
+    with st.chat_message('user'):
+        st.write(user_input)
 
-     st.session_state['message_history'].append({'role':'user','content':user_input})
-     with st.chat_message('user'):
-         st.write(user_input)
+    # 2. Handle the Assistant output (Notice how this is indented INSIDE the if block!)
+    with st.chat_message('assistant'):
+        # Create an empty box on the screen
+        tool_container=st.container()
+        message_placeholder = st.empty()
 
-     # response=chatbot.invoke({'messages':[HumanMessage(content=user_input)]},config=CONFIG )
-     # ai_message=  response['messages'][-1].content
+        async def process_stream():
+         chatbot=await build_graph()
+         full_response = ""
 
-     with st.chat_message('assistant'):
+        # Iterate through the stream directly
+         async for message_chunk, metadata in chatbot.astream(
+             {"messages": [("user", user_input)]},
+             config=CONFIG,
+              stream_mode="messages"
+         ):
 
-         dynamic_config={'configurable':{'thread_id':st.session_state['thread_id']}}
+             if hasattr(message_chunk,'tool_calls') and len(message_chunk.tool_calls)>0:
+                  with tool_container:
+                       for tool in message_chunk.tool_calls:
+                            st.info(f"Agent is using tool:`{tool['name']}`...")
 
+             elif isinstance(message_chunk,ToolMessage):
+                  with tool_container:
+                       with st.expander(f"Data received from {message_chunk.name}"):
+                           st.write(message_chunk.content)
 
-         ai_message = st.write_stream(
-              get_text(message_chunk) for message_chunk, metadata in chatbot.stream(
-                   {'messages': [HumanMessage(content=user_input)]},
-                   config=dynamic_config,
-                   stream_mode='messages'
-              )
-         )
-     st.session_state['message_history'].append({'role': 'assistant', 'content': ai_message})
+             elif isinstance(message_chunk,AIMessage):
+                  content=message_chunk.content
+
+                  if isinstance(content, list):
+                       for item in content:
+                            if isinstance(item, dict) and 'text' in item:
+                                 if item['text']:
+                                      full_response+=item['text']
+                                      message_placeholder.markdown(full_response+"▌")
+                  elif isinstance(content,str) and content:
+                      full_response+=content
+                      message_placeholder.markdown(full_response + "▌")
+
+        # Stream is finished! Remove the cursor and show final text
+         message_placeholder.markdown(full_response)
+         return full_response
+
+        final_response=asyncio.run(process_stream())
+
+    # Save to history (Also indented inside the if block)
+    st.session_state['message_history'].append({'role': 'assistant', 'content':final_response})
