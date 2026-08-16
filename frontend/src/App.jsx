@@ -1,5 +1,5 @@
 import { useState,useEffect } from 'react';
-import { Layout, CheckSquare, Hammer, Loader2, Play,Copy,Download,History  } from 'lucide-react';
+import { Layout, CheckSquare, Hammer, Loader2, Play,Copy,Download,History,Link  } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import mermaid from 'mermaid';
 import { planArchitecture, generateArchitecture, evaluateArchitecture ,fetchHistory,fetchDocumentById} from './api';
@@ -81,9 +81,10 @@ function App() {
   const [userArchitecture, setUserArchitecture] = useState('');
   const [evalResult, setEvalResult] = useState(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
-
+  const [evalCitations, setEvalCitations] = useState([]);
   const [historyList,setHistoryList]=useState([]);
   const [isLoadingHistory,setIsLoadingHistory]=useState(false);
+
 
   useEffect(()=>{
     if(activeTab=='history'){
@@ -352,7 +353,6 @@ const loadHistory = async () => {
             </div>
         )}
         {/* <-- MISSING DIV CLOSURE ADDED HERE */}
-
         {/* --- EVALUATOR TAB (RAG) --- */}
         {activeTab === 'evaluator' && (
           <div className="space-y-6">
@@ -384,13 +384,47 @@ const loadHistory = async () => {
                   <span className="text-slate-400 text-sm">Neon DB Rules Matched:</span>
                   <span className="text-blue-400 font-bold">{evalResult.matched_rules_count}</span>
                 </div>
+
+                {/* Scorecard Content */}
                 <div className="prose prose-invert max-w-none prose-headings:text-blue-400">
                   <ReactMarkdown>{evalResult.evaluation_scorecard}</ReactMarkdown>
                 </div>
+
+                {/* --- CITATIONS FOOTER ADDED HERE --- */}
+                {/* --- CITATIONS FOOTER --- */}
+                {evalResult?.citations && evalResult.citations.length > 0 && (
+                  <div className="mt-8 pt-6 border-t border-slate-800">
+                    <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                      <Link size={16} />
+                      Engineering Standards Applied
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {evalResult.citations.map((cite, index) => (
+                        <a
+                          key={index}
+                          href={cite.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-blue-500/50 text-slate-300 hover:text-blue-400 rounded-md text-xs font-medium transition-colors group cursor-pointer"
+                        >
+                          <span className="bg-slate-800 group-hover:bg-blue-900/50 text-slate-500 group-hover:text-blue-500 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                            REF
+                          </span>
+                          {cite.title}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ----------------------------------- */}
+
               </div>
             )}
           </div>
         )}
+
+
 
    {/* --- HISTORY TAB --- */}
     {/* --- HISTORY TAB --- */}

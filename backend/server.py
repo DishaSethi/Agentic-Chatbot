@@ -135,28 +135,21 @@ async def get_document(doc_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @app.post("/api/evaluate")
 async def evaluate_architecture(req: EvaluateRequest):
-    """
-    Evaluates an architecture document against best practices stored in Neon DB
-    using Gemini text-embedding-004 and gemini-2.5-flash.
-    """
     try:
-        # 1. Generate 768-dimensional vector embedding using Gemini
         embed_response = gemini_client.models.embed_content(
             model="gemini-embedding-001",
             contents=req.user_architecture,
         )
         query_embedding = embed_response.embeddings[0].values
 
-        # 2. Query Neon DB for the top 3 semantically closest best practices
         conn = psycopg2.connect(DATABASE_URL)
         register_vector(conn)
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
         cursor.execute("""
-            SELECT category, content
+            SELECT category, content,source_url
             FROM best_practices
             ORDER BY embedding <=> %s::vector
             LIMIT 3;
@@ -166,9 +159,35 @@ async def evaluate_architecture(req: EvaluateRequest):
         cursor.close()
         conn.close()
 
-        # 3. Build context from retrieved rules
+        # ==========================================
+        # 🕵️ AUDIT 1: WHAT DID NEON DB FIND?
+        # ==========================================
+        print("\n" + "="*50)
+        print("🔍 RAG AUDIT: TOP 3 MATCHES FROM NEON DB")
+        print("="*50)
+        if not retrieved_docs:
+            print("⚠️ WARNING: DB returned ZERO results.")
+        for i, doc in enumerate(retrieved_docs):
+            print(f"\n--- MATCH {i+1} [{doc['category']}] ---")
+            print(f"CONTENT: {doc['content']}")
+        print("="*50 + "\n")
+
+        # 3. Build context and citations payload
+        citations_payload = []
         if retrieved_docs:
-            context = "\n\n".join([f"[{doc['category']}] {doc['content']}" for doc in retrieved_docs])
+            context = ""
+            for doc in retrieved_docs:
+                category_id = doc['category']
+                context += f"[{category_id}] {doc['content']}\n\n"
+
+                # Build the metadata object for the React frontend
+                url_slug = category_id.replace(" ", "-").lower()
+                citations_payload.append({
+                    "id": category_id,
+                   "title": category_id,
+                    "content": doc['content'],
+                    "url":doc.get('source_url','#') # Mock internal wiki URL
+                })
         else:
             context = "General Distributed Systems and Cloud Architecture Best Practices."
 
@@ -176,9 +195,12 @@ async def evaluate_architecture(req: EvaluateRequest):
 You are a Principal Cloud Systems Architect evaluating a system design architecture.
 Compare the user's architecture against these industry best practices retrieved from our knowledge base:
 
-<best_practices>
 {context}
-</best_practices>
+
+CRITICAL INSTRUCTION FOR CITATIONS:
+Whenever you enforce a constraint or apply a rule from the provided context, you MUST cite it inline using the category name in brackets.
+Example: "You must use a message broker [Scalability]."
+Do not invent rules or cite things not in the context.
 
 Generate a comprehensive Markdown evaluation report structured as follows:
 ## 📊 Architecture Evaluation Scorecard
@@ -187,20 +209,22 @@ Generate a comprehensive Markdown evaluation report structured as follows:
 ### 3. Recommendations & Mitigations
 """
 
-        # 4. Generate the evaluation report using Gemini
         response = gemini_client.models.generate_content(
             model="gemini-3.1-flash-lite",
             contents=f"{system_prompt}\n\nUser Architecture:\n{req.user_architecture}"
         )
 
+        # 4. Return the new citations array alongside the scorecard
         return {
             "evaluation_scorecard": response.text,
-            "matched_rules_count": len(retrieved_docs)
+            "matched_rules_count": len(retrieved_docs),
+            "citations": citations_payload
         }
 
     except Exception as e:
         print(f"RAG Evaluation Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/history")
 async def get_history():
