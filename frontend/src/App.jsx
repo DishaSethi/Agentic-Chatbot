@@ -1,9 +1,9 @@
 import { useState,useEffect } from 'react';
-import { Layout, CheckSquare, Hammer, Loader2, Play,Copy,Download } from 'lucide-react';
+import { Layout, CheckSquare, Hammer, Loader2, Play,Copy,Download,History  } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import mermaid from 'mermaid';
-import { planArchitecture, generateArchitecture, evaluateArchitecture } from './api';
-
+import { planArchitecture, generateArchitecture, evaluateArchitecture ,fetchHistory,fetchDocumentById} from './api';
+// import { Layout, CheckSquare, Hammer, Loader2, Play, Copy, Download, } from 'lucide-react';
 
 mermaid.initialize({
     startOnLoad: false,
@@ -81,6 +81,63 @@ function App() {
   const [userArchitecture, setUserArchitecture] = useState('');
   const [evalResult, setEvalResult] = useState(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
+
+  const [historyList,setHistoryList]=useState([]);
+  const [isLoadingHistory,setIsLoadingHistory]=useState(false);
+
+  useEffect(()=>{
+    if(activeTab=='history'){
+        loadHistory();
+    }
+  },[activeTab]);
+
+const loadHistory = async () => {
+    setIsLoadingHistory(true);
+    try {
+      console.log("1. Calling API...");
+      const response = await fetchHistory();
+      console.log("2. Data from API:", response);
+
+      let safeArray = [];
+      if (Array.isArray(response)) {
+        safeArray = response;
+      } else if (response && Array.isArray(response.data)) {
+        safeArray = response.data;
+      } else if (response?.data?.history) {
+        safeArray = response.data.history;
+      }
+
+      console.log("3. Array to set:", safeArray);
+
+      if (safeArray.length === 0) {
+         alert("The backend returned data, but the array is empty! Check console.");
+      }
+
+      setHistoryList(safeArray);
+    } catch (error) {
+      console.error("4. ERROR CAUGHT:", error);
+      alert("Network Error! The React app could not reach the FastAPI server. Check console for CORS or 404 errors.");
+      setHistoryList([]);
+    }
+    setIsLoadingHistory(false);
+  };
+
+  const handleViewPastDocument=async(id, topic)=>{
+    setIsLoadingHistory(true);
+    try{
+
+        const data=await fetchDocumentById(id);
+
+        setPlanData({system_title:topic,tasks:[]});
+        setFinalDoc(data.markdown);
+        setActiveTab('generator');
+    }catch(error){
+        console.error("Failed to load document:",error);
+        alert("Could not load the document");
+
+    }
+    setIsLoadingHistory(false);
+  }
 
   const handlePlan = async () => {
     if (!prompt) return;
@@ -164,11 +221,20 @@ function App() {
             >
               <Hammer size={16} /> System Generator
             </button>
+
             <button
               onClick={() => setActiveTab('evaluator')}
               className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'evaluator' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-slate-400 hover:text-slate-200'}`}
             >
               <CheckSquare size={16} /> RAG Evaluator
+            </button>
+
+            {/* --- HISTORY BUTTON ADDED HERE --- */}
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'history' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              <History size={16} /> History
             </button>
           </div>
         </div>
@@ -325,6 +391,53 @@ function App() {
             )}
           </div>
         )}
+
+   {/* --- HISTORY TAB --- */}
+    {/* --- HISTORY TAB --- */}
+        {activeTab === 'history' && (
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl animate-in fade-in">
+            <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
+              <History size={20} className="text-blue-400" />
+              Past Architectures ({Array.isArray(historyList) ? historyList.length : 'Not an array'})
+            </h2>
+
+            {isLoadingHistory ? (
+              <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                <Loader2 className="animate-spin mb-2" size={24} />
+                <p>Loading database records...</p>
+              </div>
+            ) : Array.isArray(historyList) && historyList.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {historyList.map((doc, index) => (
+                  <div
+                    key={doc?.id || index}
+                    onClick={() => handleViewPastDocument(doc?.id, doc?.topic)}
+                    className="bg-slate-950 border border-slate-800 hover:border-blue-500/50 p-4 rounded-lg cursor-pointer transition-all hover:shadow-lg hover:shadow-blue-900/10 group flex items-start gap-3"
+                  >
+                    <div className="bg-slate-800 text-blue-400 p-2 rounded-md group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                      <Layout size={18} />
+                    </div>
+                    <div>
+                      <h3 className="text-slate-200 font-medium line-clamp-2 text-sm leading-snug">{doc?.topic || "Unknown Topic"}</h3>
+                      <p className="text-slate-500 text-xs mt-1">ID: #{doc?.id || "N/A"}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-slate-500 overflow-x-auto">
+                <History size={48} className="mx-auto mb-3 opacity-20" />
+                <p>No architectures saved yet (or data format error).</p>
+                <div className="mt-4 p-4 bg-slate-950 rounded text-left text-xs font-mono text-red-400 max-w-full">
+                  <strong>Debug info - type of historyList:</strong> {typeof historyList}
+                  <br />
+                  <strong>Raw value:</strong> {JSON.stringify(historyList, null, 2)}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
       </main>
           </div>
 

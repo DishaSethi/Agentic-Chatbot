@@ -202,6 +202,43 @@ Generate a comprehensive Markdown evaluation report structured as follows:
         print(f"RAG Evaluation Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/history")
+async def get_history():
+    """Fetches the list of past architecture designs"""
+    try:
+        conn=psycopg2.connect(DATABASE_URL)
+        cursor=conn.cursor(cursor_factory=RealDictCursor)
+
+        # Fetch the latest 15 designs (only grabbing the ID and topic to save bandwidth)
+        cursor.execute("SELECT id, topic FROM architectures ORDER BY id DESC LIMIT 15;")
+        records=cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+        return records
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/history/{doc_id}")
+async def get_history_document(doc_id:str):
+    """Fetches the full markdown for a specific architecture"""
+    try:
+        conn=psycopg2.connect(DATABASE_URL)
+        cursor=conn.cursor(cursor_factory=RealDictCursor)
+
+        cursor.execute("SELECT topic, markdown FROM architectures WHERE id=%s;",(doc_id,))
+        record=cursor.fetchone()
+
+        cursor.close()
+        conn.close()
+
+        if not record:
+            raise HTTPException(status_code=404, detail="Document not found")
+        return record
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     import uvicorn
     print("🚀 Starting FastAPI Server on port 8000...")

@@ -25,3 +25,14 @@ export const evaluateArchitecture=async(userArchitecture)=>{
     return response.data;
 }
 
+
+
+export const fetchHistory=async()=>{
+    const response=await api.get('/history');
+    return response.data;
+}
+
+export const fetchDocumentById=async(docId)=>{
+    const response=await api.get(`/history/${docId}`);
+    return response.data;
+};
