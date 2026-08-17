@@ -42,3 +42,14 @@ class ImageSpec(BaseModel):
 class GlobalImagePlan(BaseModel):
     md_with_placeholders: str
     images: List[ImageSpec] = Field(default_factory=list)
+
+
+class EvaluateRequest(BaseModel):
+    user_architecture:str
+
+class PlanRequest(BaseModel):
+    topic:str
+
+class ApproveRequest(BaseModel):
+    thread_id:str
+    topic:str
