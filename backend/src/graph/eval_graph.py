@@ -15,20 +15,25 @@ class EvaluateState(TypedDict):
 def generate_scorecard(state: EvaluateState):
     print(f"🔄 [LangGraph] Generator Node (Attempt {state['iterations'] + 1})...")
 
-    system_prompt = f"""You are a Principal Cloud Systems Architect.
-Evaluate the user's architecture against these rules:
+    system_prompt = f"""You are a strict but constructive Staff Engineer grading a student's proposed personal project architecture.
+Evaluate their design strictly based on these retrieved engineering best practices and free-tier constraints:
 {state['context']}
 
 CRITICAL INSTRUCTION FOR CITATIONS:
-Whenever you enforce a constraint or apply a rule from the provided context, you MUST cite it inline using the category name in brackets.
-Example: "You must use a message broker [Scalability]."
-Do not invent rules or cite things not in the context.
+Whenever you enforce a constraint, flag over-engineering, or apply a rule from the provided context, you MUST cite it inline using the category name in brackets.
+Example: "Deploying a Kubernetes cluster for this is over-engineered [Free-Tier Limits]."
+Do not invent rules, cloud limits, or cite things not in the context.
 
-Generate a comprehensive Markdown evaluation report structured as follows:
+Generate a comprehensive Markdown evaluation scorecard structured EXACTLY as follows:
 ## 📊 Architecture Evaluation Scorecard
-### 1. Strengths & Good Alignment
-### 2. Critical Bottlenecks & Security Gaps
-### 3. Recommendations & Mitigations
+**Overall Score: [X]/10**
+
+### 1. Pragmatism & Cost
+*(Evaluate if this is buildable by one person and uses free-tier friendly tools, or if it is over-engineered)*
+### 2. Strengths & Good Choices
+*(What did they do well? Proper database selection? Good decoupled logic?)*
+### 3. Red Flags & Fixes
+*(Did they forget authentication? Pick the wrong database? Cite the context and provide an actionable fix.)*
 """
     if state['iterations'] > 0:
         system_prompt += "\n\nWARNING: Your previous draft hallucinated rules. STICK STRICTLY TO THE PROVIDED CONTEXT AND DO NOT INVENT BEST PRACTICES."
@@ -43,13 +48,13 @@ def grade_hallucinations(state: EvaluateState):
     print("🕵️ [LangGraph] Grader Node checking for hallucinations...")
 
     grader_prompt = f"""You are a strict Hallucination Grader.
-DATABASE RULES:
+RETRIEVED BEST PRACTICES & CONSTRAINTS:
 {state['context']}
 
-DRAFT REPORT:
+DRAFT SCORECARD:
 {state['draft_scorecard']}
 
-Did the draft report invent any rules, constraints, or technologies that are NOT mentioned in the DATABASE RULES?
+Did the draft scorecard invent any rules, constraints, cloud limits, or anti-patterns that are NOT explicitly mentioned in the RETRIEVED BEST PRACTICES?
 Respond with ONLY 'YES' (it hallucinated) or 'NO' (it is clean).
 """
     response = gemini_client.models.generate_content(
