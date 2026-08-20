@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -19,6 +21,10 @@ app.add_middleware(
 app.include_router(generation_router)
 app.include_router(evaluation_router)
 app.include_router(history_router)
+
+@app.get("/health")
+async def healt_check():
+    return {"status":"healthy","service":"ai-architect-api"}
 
 if __name__ == "__main__":
     import uvicorn

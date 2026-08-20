@@ -6,9 +6,35 @@ from google import genai
 from src.schemas.models import EvaluateRequest
 from src.db import get_db_connection
 from src.graph.eval_graph import eval_app
-
+from langsmith import traceable
 router = APIRouter()
 gemini_client = genai.Client()
+
+
+@traceable(name="NeonDB Hybrid Search", run_type="retriever")
+def retrieve_architecture_rules(user_architecture: str, query_embedding: list):
+    """Runs the Hybrid Search and is tracked by LangSmith"""
+    conn = get_db_connection()
+    register_vector(conn)
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+    cursor.execute("""WITH vector_search AS (
+    SELECT category, content, source_url, RANK() OVER(ORDER BY embedding <=> %s:: vector) AS dense_rank FROM best_practices LIMIT 10),
+    keyword_search AS (
+    SELECT category, content, source_url , RANK() OVER(ORDER BY ts_rank_cd(to_tsvector('english', content), websearch_to_tsquery('english',%s))DESC) AS sparse_rank
+    FROM best_practices WHERE to_tsvector('english', content) @@ websearch_to_tsquery('english',%s) LIMIT 10)
+    SELECT COALESCE(v.category, k.category) AS category, COALESCE(v.content, k.content) AS content, COALESCE(v.source_url, k.source_url) AS source_url,
+    (COALESCE(1.0/(v.dense_rank+60),0.0)+COALESCE(1.0/(k.sparse_rank+60),0.0)) AS rrf_score
+    FROM vector_search v FULL OUTER JOIN keyword_search k ON v.content=k.content ORDER BY rrf_score DESC LIMIT 3;""",
+    (query_embedding, user_architecture, user_architecture))
+
+    retrieved_docs = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    return retrieved_docs
+
+
 
 @router.post("/api/evaluate")
 async def evaluate_architecture(req: EvaluateRequest):
@@ -18,23 +44,10 @@ async def evaluate_architecture(req: EvaluateRequest):
         )
         query_embedding = embed_response.embeddings[0].values
 
-        conn = get_db_connection()
-        register_vector(conn)
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-        cursor.execute("""WITH vector_search AS (
-        SELECT category, content, source_url, RANK() OVER(ORDER BY embedding <=> %s:: vector) AS dense_rank FROM best_practices LIMIT 10),
-        keyword_search AS (
-        SELECT category, content, source_url , RANK() OVER(ORDER BY ts_rank_cd(to_tsvector('english', content), websearch_to_tsquery('english',%s))DESC) AS sparse_rank
-        FROM best_practices WHERE to_tsvector('english', content) @@ websearch_to_tsquery('english',%s) LIMIT 10)
-        SELECT COALESCE(v.category, k.category) AS category, COALESCE(v.content, k.content) AS content, COALESCE(v.source_url, k.source_url) AS source_url,
-        (COALESCE(1.0/(v.dense_rank+60),0.0)+COALESCE(1.0/(k.sparse_rank+60),0.0)) AS rrf_score
-        FROM vector_search v FULL OUTER JOIN keyword_search k ON v.content=k.content ORDER BY rrf_score DESC LIMIT 3;""",
-        (query_embedding, req.user_architecture, req.user_architecture))
+        retrieved_docs = retrieve_architecture_rules(req.user_architecture,query_embedding)
 
-        retrieved_docs = cursor.fetchall()
-        cursor.close()
-        conn.close()
+
 
         print("\n" + "="*50 + "\n🔍 RAG AUDIT: TOP 3 MATCHES FROM NEON DB\n" + "="*50)
         if not retrieved_docs: print("⚠️ WARNING: DB returned ZERO results.")

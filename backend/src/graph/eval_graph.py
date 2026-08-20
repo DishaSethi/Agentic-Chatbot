@@ -1,9 +1,9 @@
 from typing import TypedDict
 from langgraph.graph import StateGraph, END
 from google import genai
-
+from langsmith import wrappers
 # Initialize Gemini client just for the graph nodes
-gemini_client = genai.Client()
+gemini_client = wrappers.wrap_gemini(genai.Client())
 
 class EvaluateState(TypedDict):
     user_architecture: str
