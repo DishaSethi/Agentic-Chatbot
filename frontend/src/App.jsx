@@ -3,8 +3,8 @@ import { planArchitecture, generateArchitecture, fetchDocumentById } from './api
 
 import Navbar from './components/Navbar';
 import GeneratorTab from './components/GeneratorTab';
-import EvaluatorTab from './components/EvaluatorTab';
-import HistoryTab from './components/HistoryTab';
+import EvaluatorTab from './components/Evaluator';
+import HistoryTab from './components/History';
 
 function App() {
   const [activeTab, setActiveTab] = useState('generator');

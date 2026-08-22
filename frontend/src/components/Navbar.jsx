@@ -13,7 +13,7 @@ const Navbar = ({ activeTab, setActiveTab }) => {
             onClick={() => setActiveTab('generator')}
             className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'generator' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-slate-400 hover:text-slate-200'}`}
           >
-            <Hammer size={16} /> Interview Setup
+            <Hammer size={16} /> Designer
           </button>
 
           <button
